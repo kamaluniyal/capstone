@@ -79,9 +79,5 @@ workflows:
         dockerfiles: ./Dockerfile
      - docker/publish:
         requires: [docker/hadolint]
-        image: jindego/webserver_smithcf
+        image: kamaluniyal/webserver_smithcf
         tag: latest
-     - snyk-scan:
-        requires: [docker/publish]
-     - deploy-change-to-kube:
-        requires: [snyk-scan]
