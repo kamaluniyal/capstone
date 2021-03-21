@@ -1,0 +1,42 @@
+# Create Load balancer
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: webserver-loadbalancer
+spec:
+  selector:
+    app: webserver-smithcf
+  type: LoadBalancer
+  ports:
+    - port: 80
+      targetPort: 80
+
+---
+
+# Create web hosts based on docker image
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webserver-smithcf
+spec:
+  selector:
+    matchLabels:
+      app: webserver-smithcf
+  replicas: 2
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 1
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: webserver-smithcf
+    spec:
+      containers:
+      - name: webserver-smithcf
+        image: jindego/webserver_smithcf
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 80

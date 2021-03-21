@@ -1,0 +1,87 @@
+version: 2.1
+orbs:
+  docker: circleci/docker@1.5.0
+  snyk: snyk/snyk@0.0.13
+  kubernetes: circleci/kubernetes@0.11.2
+
+jobs:
+  # Vulnerability scan on docker image built .
+  snyk-scan:
+    docker:
+      - image: 'circleci/buildpack-deps:stretch'
+    environment:
+      IMAGE_NAME: jindego/webserver_smithcf
+    steps:
+      - checkout
+      - setup_remote_docker
+      - run: docker build -t $IMAGE_NAME .
+      - snyk/scan:
+          docker-image-name: $IMAGE_NAME
+          fail-on-issues: false
+          
+  deploy-change-to-kube:
+    docker:
+      - image: ubuntu:18.04
+    steps:
+      - checkout
+      - run:
+          name: Install Dependencies
+          command: |
+            # install sudo package 
+            apt-get -y -qq update
+            apt-get -y install sudo
+
+            # extras for below installs
+            sudo apt-get -y install curl gnupg2 software-properties-common unzip less git dos2unix
+
+            # install AWS CLI at latest version
+            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+            unzip awscliv2.zip
+            sudo ./aws/install
+            
+            # Install kubectl
+            curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+            sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+            
+            # Install eksctl
+            curl --silent --location "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
+            sudo mv /tmp/eksctl /usr/local/bin
+
+      - run:
+          name: build kube cluster
+          command: |
+            # workaround as hanging when running as a command
+            export TERM=xterm
+            nohup aws cloudformation list-exports > list.txt
+
+            # check if eks stack already exists, if so then skip build - save time on pipelines
+            chmod 755 checkForEks.sh
+            ./checkForEks.sh
+
+      - run:
+          name: update kube cluster
+          command: |
+            # update cluster with yaml - Rolling Deployment
+            aws eks --region $AWS_DEFAULT_REGION update-kubeconfig --name UdacityCapstone
+            kubectl apply -f kube.yml
+            kubectl rollout restart deployment/webserver-smithcf
+
+      - run:
+          name: test website
+          command: |
+            chmod 755 WebCheck.sh
+            ./WebCheck.sh
+                     
+workflows:
+  default:
+    jobs:
+     - docker/hadolint:
+        dockerfiles: ./Dockerfile
+     - docker/publish:
+        requires: [docker/hadolint]
+        image: jindego/webserver_smithcf
+        tag: latest
+     - snyk-scan:
+        requires: [docker/publish]
+     - deploy-change-to-kube:
+        requires: [snyk-scan]
