@@ -1,5 +1,0 @@
-# Github 
-https://github.com/Jindego/udacity_capstone
-
-# Website
-http://a04c700195e504c0eb5d5dcbf0418536-857801857.eu-west-1.elb.amazonaws.com/
